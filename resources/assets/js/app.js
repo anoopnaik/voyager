@@ -7,7 +7,6 @@ window.toastr = require('toastr');
 window.DataTable = require('datatables');
 require('datatables-bootstrap3-plugin/media/js/datatables-bootstrap3');
 window.SimpleMDE = require('simplemde');
-window.MediaManager = require('./media');
 require('dropzone');
 require('jquery-match-height');
 require('bootstrap-toggle');
@@ -123,7 +122,7 @@ $(document).ready(function () {
     });
 
     $('.panel-collapse').on('hide.bs.collapse', function(e) {
-        var target = $(event.target);
+        var target = $(e.target);
         if (!target.is('a')) {
             target = target.parent();
         }

@@ -64,10 +64,15 @@ class VoyagerBaseController extends Controller
         // Next Get or Paginate the actual content from the MODEL that corresponds to the slug DataType
         if (strlen($dataType->model_name) != 0) {
             $model = app($dataType->model_name);
-            $query = $model::select('*');
+
+            if ($dataType->scope && $dataType->scope != '' && method_exists($model, 'scope'.ucfirst($dataType->scope))) {
+                $query = $model->{$dataType->scope}();
+            } else {
+                $query = $model::select('*');
+            }
 
             // Use withTrashed() if model uses SoftDeletes and if toggle is selected
-            if ($model && in_array(SoftDeletes::class, class_uses($model)) && \Auth::user()->can('delete', app($dataType->model_name))) {
+            if ($model && in_array(SoftDeletes::class, class_uses($model)) && app('VoyagerAuth')->user()->can('delete', app($dataType->model_name))) {
                 $usesSoftDeletes = true;
 
                 if ($request->get('showSoftDeleted')) {
@@ -114,7 +119,7 @@ class VoyagerBaseController extends Controller
         $isServerSide = isset($dataType->server_side) && $dataType->server_side;
 
         // Check if a default search key is set
-        $defaultSearchKey = isset($dataType->default_search_key) ? $dataType->default_search_key : null;
+        $defaultSearchKey = $dataType->default_search_key ?? null;
 
         $view = 'voyager::bread.browse';
 
@@ -164,6 +169,9 @@ class VoyagerBaseController extends Controller
             // Use withTrashed() if model uses SoftDeletes and if toggle is selected
             if ($model && in_array(SoftDeletes::class, class_uses($model))) {
                 $model = $model->withTrashed();
+            }
+            if ($dataType->scope && $dataType->scope != '' && method_exists($model, 'scope'.ucfirst($dataType->scope))) {
+                $model = $model->{$dataType->scope}();
             }
             $dataTypeContent = call_user_func([$model, 'findOrFail'], $id);
             if ($dataTypeContent->deleted_at) {
@@ -220,7 +228,9 @@ class VoyagerBaseController extends Controller
             if ($model && in_array(SoftDeletes::class, class_uses($model))) {
                 $model = $model->withTrashed();
             }
-
+            if ($dataType->scope && $dataType->scope != '' && method_exists($model, 'scope'.ucfirst($dataType->scope))) {
+                $model = $model->{$dataType->scope}();
+            }
             $dataTypeContent = call_user_func([$model, 'findOrFail'], $id);
         } else {
             // If Model doest exist, get data from table name
@@ -260,6 +270,9 @@ class VoyagerBaseController extends Controller
         $id = $id instanceof Model ? $id->{$id->getKeyName()} : $id;
 
         $model = app($dataType->model_name);
+        if ($dataType->scope && $dataType->scope != '' && method_exists($model, 'scope'.ucfirst($dataType->scope))) {
+            $model = $model->{$dataType->scope}();
+        }
         if ($model && in_array(SoftDeletes::class, class_uses($model))) {
             $data = $model->withTrashed()->findOrFail($id);
         } else {
@@ -310,7 +323,7 @@ class VoyagerBaseController extends Controller
                             : false;
 
         foreach ($dataType->addRows as $key => $row) {
-            $dataType->addRows[$key]['col_width'] = isset($row->details->width) ? $row->details->width : 100;
+            $dataType->addRows[$key]['col_width'] = $row->details->width ?? 100;
         }
 
         // If a column has a relationship associated with it, we do not want to show that field
@@ -428,6 +441,9 @@ class VoyagerBaseController extends Controller
 
         // Get record
         $model = call_user_func([$dataType->model_name, 'withTrashed']);
+        if ($dataType->scope && $dataType->scope != '' && method_exists($model, 'scope'.ucfirst($dataType->scope))) {
+            $model = $model->{$dataType->scope}();
+        }
         $data = $model->findOrFail($id);
 
         $displayName = $dataType->display_name_singular;
@@ -476,6 +492,23 @@ class VoyagerBaseController extends Controller
                 }
             }
         }
+
+        // Delete media-picker files
+        $dataType->rows->where('type', 'media_picker')->where('details.delete_files', true)->each(function ($row) use ($data) {
+            $content = $data->{$row->field};
+            if (isset($content)) {
+                if (!is_array($content)) {
+                    $content = json_decode($content);
+                }
+                if (is_array($content)) {
+                    foreach ($content as $file) {
+                        $this->deleteFileIfExists($file);
+                    }
+                } else {
+                    $this->deleteFileIfExists($content);
+                }
+            }
+        });
     }
 
     /**
@@ -583,6 +616,15 @@ class VoyagerBaseController extends Controller
             $i->$column = ($key + 1);
             $i->save();
         }
+    }
+
+    public function action(Request $request)
+    {
+        $slug = $this->getSlug($request);
+        $dataType = Voyager::model('DataType')->where('slug', '=', $slug)->first();
+
+        $action = new $request->action($dataType, null);
+        return $action->massAction(explode(',', $request->ids), $request->headers->get('referer'));
     }
 
     /**

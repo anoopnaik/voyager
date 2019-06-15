@@ -17,7 +17,6 @@ use TCG\Voyager\Events\TableAdded;
 use TCG\Voyager\Events\TableDeleted;
 use TCG\Voyager\Events\TableUpdated;
 use TCG\Voyager\Facades\Voyager;
-use TCG\Voyager\Models\DataType;
 
 class VoyagerDatabaseController extends Controller
 {
@@ -30,8 +29,8 @@ class VoyagerDatabaseController extends Controller
         $tables = array_map(function ($table) use ($dataTypes) {
             $table = [
                 'name'       => $table,
-                'slug'       => isset($dataTypes[$table]['slug']) ? $dataTypes[$table]['slug'] : null,
-                'dataTypeId' => isset($dataTypes[$table]['id']) ? $dataTypes[$table]['id'] : null,
+                'slug'       => $dataTypes[$table]['slug'] ?? null,
+                'dataTypeId' => $dataTypes[$table]['id'] ?? null,
             ];
 
             return (object) $table;
